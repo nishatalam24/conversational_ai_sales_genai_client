@@ -1733,3 +1733,35 @@ body {
   }
 }
 
+/* Enhanced Message Content */
+.message-content {
+  line-height: 1.6;
+  font-size: 0.95rem;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.message-content .bold {
+  font-weight: 700;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 0.1em 0.3em;
+  border-radius: 3px;
+}
+
+.message-content .italic {
+  font-style: italic;
+  opacity: 0.9;
+}
+
+.message-content .bullet {
+  color: rgba(255, 255, 255, 0.7);
+  margin-right: 0.5em;
+  font-size: 1.2em;
+}
+
+.message-content br {
+  margin-bottom: 0.5em;
+  display: block;
+  content: "";
+}

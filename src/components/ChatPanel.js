@@ -11,13 +11,32 @@ const ChatPanel = ({ chatHistory, setChatHistory, isThinking, setIsThinking, set
   const [isGeneratingChatPDF, setIsGeneratingChatPDF] = useState(false);
   const [lastQueryContext, setLastQueryContext] = useState('');
   const chatHistoryRef = useRef(null);
-
+const [suggestionContext, setSuggestionContext] = useState({
+  lastQuery: '',
+  queryType: '',
+  metrics: null
+});
   // Auto-scroll to bottom when new messages arrive
-  useEffect(() => {
+// Update auto-scroll effect
+useEffect(() => {
+  const scrollToBottom = () => {
     if (chatHistoryRef.current) {
-      chatHistoryRef.current.scrollTop = chatHistoryRef.current.scrollHeight;
+      const scrollHeight = chatHistoryRef.current.scrollHeight;
+      const height = chatHistoryRef.current.clientHeight;
+      const maxScrollTop = scrollHeight - height;
+      
+      // Smooth scroll to bottom
+      chatHistoryRef.current.scrollTo({
+        top: maxScrollTop,
+        behavior: 'smooth'
+      });
     }
-  }, [chatHistory, isThinking]);
+  };
+
+  // Small delay to ensure content is rendered
+  const timeoutId = setTimeout(scrollToBottom, 100);
+  return () => clearTimeout(timeoutId);
+}, [chatHistory, isThinking, filteredHistory]);
 
   // Filter chat history based on search
   useEffect(() => {
@@ -52,21 +71,39 @@ const ChatPanel = ({ chatHistory, setChatHistory, isThinking, setIsThinking, set
   };
 
   // Function to format text for display (remove markdown)
-  const formatMessageForDisplay = (text) => {
-    if (!text) return '';
+  // const formatMessageForDisplay = (text) => {
+  //   if (!text) return '';
     
-    return text
-      // Remove ** bold ** markers but keep content
-      .replace(/\*\*(.*?)\*\*/g, '$1')
-      // Remove * italic * markers but keep content
-      .replace(/\*(.*?)\*/g, '$1')
-      // Convert bullet points to proper display
-      .replace(/^\* /gm, '• ')
-      .replace(/^- /gm, '• ')
-      // Clean up extra spaces
-      .replace(/\s+/g, ' ')
-      .trim();
-  };
+  //   return text
+  //     // Remove ** bold ** markers but keep content
+  //     .replace(/\*\*(.*?)\*\*/g, '$1')
+  //     // Remove * italic * markers but keep content
+  //     .replace(/\*(.*?)\*/g, '$1')
+  //     // Convert bullet points to proper display
+  //     .replace(/^\* /gm, '• ')
+  //     .replace(/^- /gm, '• ')
+  //     // Clean up extra spaces
+  //     .replace(/\s+/g, ' ')
+  //     .trim();
+  // };
+
+  // Update formatMessageForDisplay function
+const formatMessageForDisplay = (text) => {
+  if (!text) return '';
+  
+  return text
+    // Preserve bold and italic markers but wrap in spans
+    .replace(/\*\*(.*?)\*\*/g, '<span class="bold">$1</span>')
+    .replace(/\*(.*?)\*/g, '<span class="italic">$1</span>')
+    // Convert bullet points with proper spacing
+    .replace(/^\* /gm, '<span class="bullet">•</span> ')
+    .replace(/^- /gm, '<span class="bullet">•</span> ')
+    // Preserve line breaks
+    .replace(/\n/g, '<br/>')
+    // Clean up extra spaces but preserve intended spacing
+    .replace(/\s+/g, ' ')
+    .trim();
+};
 
   // Enhanced PDF generation for suggestions
   const downloadSuggestionsPDF = async () => {
@@ -285,7 +322,32 @@ const ChatPanel = ({ chatHistory, setChatHistory, isThinking, setIsThinking, set
       setIsGeneratingChatPDF(false);
     }
   };
-
+// Add enhanced suggestions generator
+const generateEnhancedSuggestions = (baseSuggestions, context, dashboardData) => {
+  const { lastQuery, queryType, metrics } = context;
+  let enhanced = [...baseSuggestions];
+  
+  // Add contextual suggestions based on current query
+  if (lastQuery.toLowerCase().includes('sales')) {
+    enhanced.unshift(
+      'Show me lowest performing regions',
+      'Compare with last month'
+    );
+  }
+  
+  // Add metric-based suggestions
+  if (metrics?.totalSales) {
+    const revenue = metrics.totalSales;
+    if (revenue < 100000) {
+      enhanced.push('How can we improve sales?');
+    } else {
+      enhanced.push('What drove this success?');
+    }
+  }
+  
+  // Limit to 5 most relevant suggestions
+  return enhanced.slice(0, 5);
+};
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!input.trim() || isThinking) return;
@@ -311,6 +373,22 @@ const ChatPanel = ({ chatHistory, setChatHistory, isThinking, setIsThinking, set
 
       const data = await response.json();
       
+          setSuggestionContext({
+      lastQuery: input,
+      queryType: data.functionCalled || 'general',
+      metrics: data.dashboardData?.summary || null
+    });
+    
+    // Generate smarter suggestions based on context
+    if (data.suggestions) {
+      const enhancedSuggestions = generateEnhancedSuggestions(
+        data.suggestions,
+        suggestionContext,
+        data.dashboardData
+      );
+      setSuggestions(enhancedSuggestions);
+    }
+    
       const assistantMessage = {
         role: 'model',
         parts: [{ text: data.answer }],
@@ -423,9 +501,12 @@ const ChatPanel = ({ chatHistory, setChatHistory, isThinking, setIsThinking, set
       <div className="chat-history" ref={chatHistoryRef}>
         {filteredHistory.map((message, index) => (
           <div key={index} className={`message ${message.role} ${message.isOffTopic ? 'off-topic' : ''}`}>
-            <div className="message-content">
-              {formatMessageForDisplay(message.parts?.[0]?.text || message.content)}
-            </div>
+        <div 
+  className="message-content"
+  dangerouslySetInnerHTML={{ 
+    __html: formatMessageForDisplay(message.parts?.[0]?.text || message.content)
+  }}
+/>
             {message.functionCalled && (
               <div className="function-indicator">
                 📊 Analysis: {message.functionCalled}
